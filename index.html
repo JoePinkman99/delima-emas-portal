@@ -902,13 +902,7 @@
             <label for="postBody">Description <span class="en">Keterangan (optional)</span></label>
             <textarea id="postBody" placeholder="Tambahan maklumat..."></textarea>
           </div>
-          <div class="form-group">
-            <label for="postFile">Attach File <span class="en">(PDF / Image / Document)</span></label>
-            <input type="file" id="postFile" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx">
-            <div class="hint">Max ~3 MB. Files are stored in this browser's local storage — large or many files may hit the storage limit.</div>
-            <div class="field-error" id="err-postFile">File is too large. Please choose a file under 3 MB.</div>
-          </div>
-          <button class="primary" id="publishBtn" onclick="addPost()">Publish / Upload</button>
+          <button class="primary" id="publishBtn" onclick="addPost()">Publish</button>
         </div>
 
         <div class="card">
@@ -977,6 +971,7 @@
           <div id="cloudConnectedStatus" style="display:none;margin-top:14px;">
             <p style="font-size:13px;">✅ Connected on this device. You can now save changes from here.</p>
             <p class="hint">Bin visibility: <strong id="cloudVisibilityDisplay">checking…</strong></p>
+            <p class="hint">Approx. data size: <strong id="cloudSizeDisplay">checking…</strong></p>
             <button class="primary" onclick="makeCurrentBinPublic()" id="makePublicBtn" style="margin-top:6px;">Make Bin Public</button>
             <p class="hint">Required so other devices can read the portal without a key. Safe — only this Master Key can still change the data.</p>
           </div>
@@ -1026,7 +1021,6 @@ const KEY_BOOKINGS = "delimaEmasBookings"; // [...]
 const KEY_OUTSTANDING = "delimaEmasOutstanding"; // {amount, asOf}
 const KEY_VISITOR_PASSES = "delimaEmasVisitorPasses"; // [...]
 const KEY_ORGCHART = "delimaEmasOrgChart"; // {roleKey: {name, photo}}
-const MAX_FILE_BYTES = 3 * 1024 * 1024; // 3 MB
 const MAX_PHOTO_BYTES = 1 * 1024 * 1024; // 1 MB per org chart photo
 
 const ORG_ROLES = [
@@ -1526,7 +1520,6 @@ async function renderPostList(category, containerId) {
       <h2 style="font-size:15px;">${escapeHtml(p.title)}</h2>
       <div class="date">📅 ${formatDate(p.date)}</div>
       ${p.body ? `<p>${escapeHtml(p.body)}</p>` : ''}
-      ${p.file ? `<a class="file-link" href="${p.file}" download="${escapeHtml(p.fileName)}">📎 ${escapeHtml(p.fileName)}</a>` : ''}
     </div>
   `).join('');
 }
@@ -1593,49 +1586,26 @@ async function addPost() {
   const title = document.getElementById('postTitle').value.trim();
   const date = document.getElementById('postDate').value || new Date().toISOString().slice(0,10);
   const body = document.getElementById('postBody').value.trim();
-  const fileInput = document.getElementById('postFile');
 
   document.getElementById('err-postTitle').style.display = 'none';
-  document.getElementById('err-postFile').style.display = 'none';
 
-  let hasError = false;
   if (!title) {
     document.getElementById('err-postTitle').style.display = 'block';
-    hasError = true;
+    return;
   }
-  if (fileInput.files && fileInput.files[0] && fileInput.files[0].size > MAX_FILE_BYTES) {
-    document.getElementById('err-postFile').style.display = 'block';
-    hasError = true;
-  }
-  if (hasError) return;
 
-  const post = { id: Date.now().toString(), title, date, body, file: null, fileName: null };
+  const post = { id: Date.now().toString(), title, date, body };
 
   const publishBtn = document.getElementById('publishBtn');
   publishBtn.disabled = true;
-  publishBtn.textContent = 'Uploading...';
+  publishBtn.textContent = 'Publishing...';
 
-  if (fileInput.files && fileInput.files[0]) {
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    reader.onload = async function(e) {
-      post.file = e.target.result;
-      post.fileName = file.name;
-      await finishAddPost(category, post);
-    };
-    reader.onerror = function() {
-      showToast('Could not read file. Try again or choose a different file.');
-      resetPublishBtn();
-    };
-    reader.readAsDataURL(file);
-  } else {
-    await finishAddPost(category, post);
-  }
+  await finishAddPost(category, post);
 }
 function resetPublishBtn() {
   const publishBtn = document.getElementById('publishBtn');
   publishBtn.disabled = false;
-  publishBtn.textContent = 'Publish / Upload';
+  publishBtn.textContent = 'Publish';
 }
 async function finishAddPost(category, post) {
   setSyncStatus('loading');
@@ -1646,7 +1616,6 @@ async function finishAddPost(category, post) {
     document.getElementById('postTitle').value = '';
     document.getElementById('postDate').value = '';
     document.getElementById('postBody').value = '';
-    document.getElementById('postFile').value = '';
     await renderAllPublic();
     await renderManageList();
     showToast('Published to cloud.');
@@ -1672,7 +1641,6 @@ async function renderManageList() {
       <h2 style="font-size:15px;">${escapeHtml(p.title)}</h2>
       <div class="date">📅 ${formatDate(p.date)}</div>
       ${p.body ? `<p>${escapeHtml(p.body)}</p>` : ''}
-      ${p.file ? `<a class="file-link" href="${p.file}" download="${escapeHtml(p.fileName)}">📎 ${escapeHtml(p.fileName)}</a>` : ''}
     </div>
   `).join('');
 }
@@ -2115,19 +2083,26 @@ function updateCloudConnectedStatusUI() {
 
 async function checkBinVisibility(cfg) {
   const visEl = document.getElementById('cloudVisibilityDisplay');
+  const sizeEl = document.getElementById('cloudSizeDisplay');
   const btn = document.getElementById('makePublicBtn');
   if (!visEl || !cfg) return;
   try {
     const res = await fetch(JSONBIN_BASE + '/' + cfg.binId + '/latest', {
       headers: { 'X-Master-Key': cfg.masterKey }
     });
-    if (!res.ok) { visEl.textContent = 'unknown'; return; }
+    if (!res.ok) { visEl.textContent = 'unknown'; if (sizeEl) sizeEl.textContent = 'unknown'; return; }
     const data = await res.json();
     const isPrivate = !!(data && data.metadata && data.metadata.private);
     visEl.textContent = isPrivate ? '🔒 Private (residents cannot read it yet)' : '🌍 Public (residents can read it)';
     if (btn) btn.style.display = isPrivate ? 'inline-block' : 'none';
+    if (sizeEl) {
+      const bytes = new Blob([JSON.stringify(data.record || {})]).size;
+      const kb = (bytes / 1024).toFixed(1);
+      sizeEl.textContent = kb + ' KB';
+    }
   } catch (e) {
     visEl.textContent = 'unknown';
+    if (sizeEl) sizeEl.textContent = 'unknown';
   }
 }
 
