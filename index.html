@@ -946,18 +946,24 @@
           <h2>☁️ Cloud Setup <span class="en">Sambungan Storan Awan</span></h2>
           <p style="font-size:13px;line-height:1.6;margin-top:6px;">
             Connect this portal to a free online JSON storage account so all data (announcements, bookings,
-            visitor passes, etc.) is shared by everyone who opens this page — on any device, hosted anywhere.
-            No coding, no Google Cloud Console.
+            visitor passes, etc.) is shared by everyone who opens this page — on any device, without them
+            needing to set up anything.
           </p>
+
+          <div class="security-note" style="margin:12px 0;">
+            ⚠️ <strong>3 steps are required</strong> for other residents to see your data — most people only do
+            steps 1–2 and then wonder why their phone shows nothing. Step 3 (below) is what makes it actually
+            shared.
+          </div>
 
           <h3 style="font-size:14px;color:var(--navy);margin:16px 0 6px;">Step 1 — Create a free account (2 minutes)</h3>
           <ol style="font-size:13px;line-height:1.8;padding-left:20px;">
             <li>Open <a href="https://jsonbin.io/login" target="_blank" rel="noopener">jsonbin.io</a> and sign up (Google/GitHub/email).</li>
             <li>Go to <a href="https://jsonbin.io/api-keys" target="_blank" rel="noopener">jsonbin.io/api-keys</a> and copy your <strong>X-Master-Key</strong>.</li>
-            <li>Paste it below and click "Connect" — the portal will automatically create its storage bin for you.</li>
+            <li>Paste it below and click "Connect" — the portal will automatically create a <strong>public</strong> storage bin for you (public means anyone with the Bin ID can read it — that's what lets residents view the portal with no setup; only this Master Key can change it).</li>
           </ol>
 
-          <h3 style="font-size:14px;color:var(--navy);margin:18px 0 6px;">Step 2 — Connect</h3>
+          <h3 style="font-size:14px;color:var(--navy);margin:18px 0 6px;">Step 2 — Connect (this device only)</h3>
           <div class="form-group">
             <label for="cloudMasterKey">JSONBin Master Key</label>
             <input type="text" id="cloudMasterKey" placeholder="$2a$10$...">
@@ -969,17 +975,32 @@
           <button class="primary" onclick="connectCloud()" id="cloudConnectBtn">Connect</button>
 
           <div id="cloudConnectedStatus" style="display:none;margin-top:14px;">
-            <p style="font-size:13px;">✅ Connected to cloud storage.</p>
-            <p class="hint">Bin ID: <code id="cloudBinIdDisplay"></code> — everyone who opens this portal page will automatically share this same Bin ID once you've saved the file, so they don't need to set up anything themselves.</p>
-            <button class="secondary" onclick="disconnectCloud()">Disconnect</button>
+            <p style="font-size:13px;">✅ Connected on this device. You can now save changes from here.</p>
+            <p class="hint">Bin visibility: <strong id="cloudVisibilityDisplay">checking…</strong></p>
+            <button class="primary" onclick="makeCurrentBinPublic()" id="makePublicBtn" style="margin-top:6px;">Make Bin Public</button>
+            <p class="hint">Required so other devices can read the portal without a key. Safe — only this Master Key can still change the data.</p>
+          </div>
+
+          <h3 style="font-size:14px;color:var(--navy);margin:18px 0 6px;">Step 3 — Make it shared (required, one-time)</h3>
+          <p style="font-size:13px;line-height:1.6;">
+            Right now, only <strong>this browser</strong> knows the Bin ID. Other devices (residents' phones, your
+            own phone) won't see any data until you bake the Bin ID into the page itself:
+          </p>
+          <ol style="font-size:13px;line-height:1.8;padding-left:20px;">
+            <li>Copy your Bin ID: <code id="cloudBinIdDisplay" style="font-weight:700;">—</code></li>
+            <li>Send this Bin ID to whoever is helping you edit the portal file (e.g. paste it back here in this chat with Claude), and ask to have it set as the page's permanent shared Bin ID.</li>
+            <li>Re-download the updated file and re-publish it to GitHub, like before.</li>
+          </ol>
+          <p class="hint">After that one-time step, every visitor — including your own phone — will read the same shared data automatically, with no setup on their end.</p>
+
+          <div style="margin-top:14px;">
+            <button class="secondary" onclick="disconnectCloud()">Disconnect this device</button>
           </div>
 
           <div class="security-note" style="margin-top:14px;">
             ⚠️ Your Master Key gives full read/write access to your JSONBin account — treat it like a password.
-            It is stored only in this browser's local storage, never shown to regular residents (only visible here
-            in the Admin panel). For a portal shared publicly, consider asking JSONBin support about a
-            read-only "Access Key" for the public-facing pages instead, while keeping the Master Key only on
-            the admin's own device.
+            It is stored only in this browser's local storage and only needed here in the Admin panel to make
+            changes. Regular residents never need it, since reading the portal doesn't require any key.
           </div>
         </div>
       </div>
@@ -1020,8 +1041,21 @@ const ORG_ROLES = [
 
 /* ---------- Cloud storage connection (JSONBin.io) ----------
    One JSONBin "bin" holds the entire portal's data as a single JSON object,
-   keyed by our existing storage keys (KEY_POSTS, KEY_PAGES, etc). */
-const KEY_CLOUD_CONFIG = "delimaEmasCloudConfig"; // {masterKey, binId} — local per-browser setup
+   keyed by our existing storage keys (KEY_POSTS, KEY_PAGES, etc).
+
+   IMPORTANT: the bin is created as PUBLIC, so anyone who opens this page can
+   READ shared data with no key at all. Only WRITING (saving changes) needs
+   the admin's Master Key, entered once in Admin → Cloud Setup on their own
+   device — it is never required for ordinary residents just browsing.
+
+   PORTAL_BIN_ID is meant to be shared by everyone: once the admin creates the
+   bin the first time, paste the Bin ID shown into this constant and republish
+   the file, so every visitor automatically reads the same shared bin with
+   zero setup. Until that's done, it falls back to whatever Bin ID the admin
+   saved locally on their own device (so the admin can keep working before
+   sharing the final Bin ID with everyone else). */
+const PORTAL_BIN_ID = "6a36db23f5f4af5e29155cfe"; // shared bin — every visitor reads from this
+const KEY_CLOUD_CONFIG = "delimaEmasCloudConfig"; // {masterKey, binId} — local, admin-only (write access)
 const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
 let jsonbinCache = null;       // in-memory copy of the whole bin's contents
 let jsonbinCacheLoaded = false;
@@ -1034,19 +1068,28 @@ function setCloudConfig(cfg) {
   try { localStorage.setItem(KEY_CLOUD_CONFIG, JSON.stringify(cfg)); return true; }
   catch (e) { return false; }
 }
+/* The Bin ID everyone (including anonymous visitors) should read from:
+   prefer the one baked into the page, fall back to the admin's local config. */
+function getReadBinId() {
+  if (PORTAL_BIN_ID) return PORTAL_BIN_ID;
+  const cfg = getCloudConfig();
+  return cfg ? cfg.binId : null;
+}
 function isCloudConfigured() {
+  return !!getReadBinId();
+}
+function isCloudWritable() {
   const cfg = getCloudConfig();
   return !!(cfg && cfg.masterKey && cfg.binId);
 }
 
 async function jsonbinFetchAll(force) {
-  const cfg = getCloudConfig();
-  if (!cfg || !cfg.masterKey || !cfg.binId) throw new Error('not-configured');
+  const binId = getReadBinId();
+  if (!binId) throw new Error('not-configured');
   if (jsonbinCacheLoaded && !force) return jsonbinCache;
 
-  const res = await fetch(JSONBIN_BASE + '/' + cfg.binId + '/latest', {
-    headers: { 'X-Master-Key': cfg.masterKey }
-  });
+  // Public bin: no auth header needed to read.
+  const res = await fetch(JSONBIN_BASE + '/' + binId + '/latest');
   if (!res.ok) throw new Error('jsonbin GET failed: ' + res.status);
   const data = await res.json();
   jsonbinCache = (data && data.record) ? data.record : {};
@@ -1056,7 +1099,7 @@ async function jsonbinFetchAll(force) {
 
 async function jsonbinSaveAll(fullData) {
   const cfg = getCloudConfig();
-  if (!cfg || !cfg.masterKey || !cfg.binId) throw new Error('not-configured');
+  if (!cfg || !cfg.masterKey || !cfg.binId) throw new Error('not-writable');
 
   const res = await fetch(JSONBIN_BASE + '/' + cfg.binId, {
     method: 'PUT',
@@ -1072,13 +1115,35 @@ async function jsonbinSaveAll(fullData) {
   return true;
 }
 
+async function jsonbinMakePublic(masterKey, binId) {
+  const res = await fetch(JSONBIN_BASE + '/' + binId + '/meta/privacy', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Master-Key': masterKey,
+      'X-Bin-Private': 'false'
+    },
+    body: JSON.stringify({})
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const errBody = await res.json();
+      detail = errBody && errBody.message ? errBody.message : '';
+    } catch (e) { /* not JSON */ }
+    throw new Error('Could not make bin public: HTTP ' + res.status + (detail ? ' — ' + detail : ''));
+  }
+  return true;
+}
+
 async function jsonbinCreateBin(masterKey) {
   const res = await fetch(JSONBIN_BASE, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Master-Key': masterKey,
-      'X-Bin-Name': 'delima-emas-portal'
+      'X-Bin-Name': 'delima-emas-portal',
+      'X-Bin-Private': 'false' // public bin: anyone with the Bin ID can read it, no key needed
     },
     body: JSON.stringify({ initialized: true })
   });
@@ -1128,6 +1193,10 @@ async function cloudGet(key, fallback) {
 }
 async function cloudSet(key, value, failMsg) {
   if (isCloudConfigured()) {
+    if (!isCloudWritable()) {
+      showToast('You need to connect with the Master Key in Admin → Cloud Setup on this device before you can save changes.');
+      return false;
+    }
     try {
       const all = await jsonbinFetchAll(true); // refresh first so we don't clobber other residents' concurrent edits
       all[key] = value;
@@ -2033,13 +2102,54 @@ function updateCloudConnectedStatusUI() {
   const statusEl = document.getElementById('cloudConnectedStatus');
   const binIdDisplay = document.getElementById('cloudBinIdDisplay');
   if (!statusEl) return;
-  if (isCloudConfigured()) {
+  if (isCloudWritable()) {
     const cfg = getCloudConfig();
     statusEl.style.display = 'block';
     if (binIdDisplay) binIdDisplay.textContent = cfg.binId;
+    checkBinVisibility(cfg);
   } else {
     statusEl.style.display = 'none';
+    if (binIdDisplay) binIdDisplay.textContent = '—';
   }
+}
+
+async function checkBinVisibility(cfg) {
+  const visEl = document.getElementById('cloudVisibilityDisplay');
+  const btn = document.getElementById('makePublicBtn');
+  if (!visEl || !cfg) return;
+  try {
+    const res = await fetch(JSONBIN_BASE + '/' + cfg.binId + '/latest', {
+      headers: { 'X-Master-Key': cfg.masterKey }
+    });
+    if (!res.ok) { visEl.textContent = 'unknown'; return; }
+    const data = await res.json();
+    const isPrivate = !!(data && data.metadata && data.metadata.private);
+    visEl.textContent = isPrivate ? '🔒 Private (residents cannot read it yet)' : '🌍 Public (residents can read it)';
+    if (btn) btn.style.display = isPrivate ? 'inline-block' : 'none';
+  } catch (e) {
+    visEl.textContent = 'unknown';
+  }
+}
+
+async function makeCurrentBinPublic() {
+  const cfg = getCloudConfig();
+  if (!cfg || !cfg.masterKey || !cfg.binId) {
+    showToast('Connect with your Master Key first.');
+    return;
+  }
+  const btn = document.getElementById('makePublicBtn');
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+  try {
+    await jsonbinMakePublic(cfg.masterKey, cfg.binId);
+    showToast('Bin is now public — residents can read the portal.');
+    await checkBinVisibility(cfg);
+  } catch (e) {
+    console.error('Make public error:', e);
+    showToast('Could not change visibility: ' + (e && e.message ? e.message : 'unknown error'));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Make Bin Public';
 }
 
 function disconnectCloud() {
