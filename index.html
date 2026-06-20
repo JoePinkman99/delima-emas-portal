@@ -1080,9 +1080,19 @@ async function jsonbinCreateBin(masterKey) {
       'X-Master-Key': masterKey,
       'X-Bin-Name': 'delima-emas-portal'
     },
-    body: JSON.stringify({})
+    body: JSON.stringify({ initialized: true })
   });
-  if (!res.ok) throw new Error('jsonbin CREATE failed: ' + res.status);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const errBody = await res.json();
+      detail = errBody && errBody.message ? errBody.message : '';
+    } catch (e) { /* response wasn't JSON */ }
+    const err = new Error('jsonbin CREATE failed: ' + res.status + (detail ? ' — ' + detail : ''));
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
   const data = await res.json();
   return data.metadata.id;
 }
@@ -1970,8 +1980,8 @@ function renderCloudSetupUI() {
 }
 
 async function connectCloud() {
-  const masterKey = document.getElementById('cloudMasterKey').value.trim();
-  let binId = document.getElementById('cloudBinId').value.trim();
+  const masterKey = document.getElementById('cloudMasterKey').value.replace(/\s+/g, '').trim();
+  let binId = document.getElementById('cloudBinId').value.replace(/\s+/g, '').trim();
 
   if (!masterKey) {
     showToast('Please paste your JSONBin Master Key.');
@@ -1992,7 +2002,14 @@ async function connectCloud() {
       const res = await fetch(JSONBIN_BASE + '/' + binId + '/latest', {
         headers: { 'X-Master-Key': masterKey }
       });
-      if (!res.ok) throw new Error('Could not access that Bin ID with this Master Key.');
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const errBody = await res.json();
+          detail = errBody && errBody.message ? errBody.message : '';
+        } catch (e) { /* not JSON */ }
+        throw new Error('Could not access that Bin ID with this Master Key' + (detail ? ' — ' + detail : ' (HTTP ' + res.status + ')'));
+      }
     }
 
     setCloudConfig({ masterKey, binId });
@@ -2004,7 +2021,8 @@ async function connectCloud() {
     await renderAllPublic();
     showToast('Connected to cloud storage.');
   } catch (e) {
-    showToast('Could not connect. Check your Master Key (and Bin ID, if entered) and try again.');
+    console.error('JSONBin connect error:', e);
+    showToast('Could not connect: ' + (e && e.message ? e.message : 'unknown error'));
   }
 
   btn.disabled = false;
